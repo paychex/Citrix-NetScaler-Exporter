@@ -20,12 +20,13 @@ bind system user stats stat 100
 ## Usage
 You can monitor multiple NetScaler instances by passing in the URL, username, and password as command line flags to the exporter.  If you're running multiple exporters on the same server, you'll also need to change the port that the exporter binds to.
 
-| Flag      | Description                                                                                               | Default Value |
-| --------- | --------------------------------------------------------------------------------------------------------- | ------------- |
-| url       | Base URL of the NetScaler management interface.  Normally something like https://mynetscaler.internal.com | none          |
-| username  | Username with which to connect to the NetScaler API                                                       | none          |
-| password  | Password with which to connect to the NetScaler API                                                       | none          |
-| bind_port | Port to bind the exporter endpoint to                                                                     | 9280          |
+| Flag      | Description                                                                                               | Default Value | Env Name            |
+| --------- | --------------------------------------------------------------------------------------------------------- | ------------- | ------------------- |
+| url       | Base URL of the NetScaler management interface.  Normally something like https://mynetscaler.internal.com | none          | NETSCALER_URL       |
+| username  | Username with which to connect to the NetScaler API                                                       | none          | NETSCALER_USERNAME  |
+| password  | Password with which to connect to the NetScaler API                                                       | none          | NETSCALER_PASSWORD  |
+| bind_port | Port to bind the exporter endpoint to                                                                     | 9280          | NETSCALER_BIND_PORT |
+| multi     | Enable multi query endpoint                                                                               | false         | NETSCALER_MULTI     |
 
 
 Run the exporter manually using the following command:
@@ -36,8 +37,36 @@ Citrix-NetScaler-Exporter.exe -url https://mynetscaler.internal.com -username st
 
 This will run the exporter using the default bind port.  If you need to change the port, append the ``-bind_port`` flag to the command.
 
+You may also define environment variables for each of the flags and skip the command line switches
+
 ### Running as a service
 Ideally you'll run the exporter as a service.  There are many ways to do that, so it's really up to you.  If you're running it on Windows I would recommend [NSSM](https://nssm.cc/).
+
+### Running in multi-query mode
+While normally one runs one exporter per device, there are times where running one exporter for multiple Netscaler devices may make sense.  This setup works similar to the [SNMP exporter](https://github.com/prometheus/snmp_exporter).  Note that you will need to configure each Netscaler device to use the same username and password for stats.
+
+When configuring Prometheus to scrape in this manner use the following Prometheus config snippet:
+
+````YAML
+scrape_configs:
+  - job_name: 'netscaler'
+    static_configs:
+      - targets:
+        - 192.168.1.2  # Netscaler device.
+        - 192.168.1.3  # Netscaler device 2
+        - 192.168.2.2  # Netscaler device 3, etc
+    metrics_path: /query
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9280  # The netscaler exporter's real hostname:port running in "multi-query" mode
+  - job_name: 'netscaler-exporter-stats' # gathers the exporter application process stats if you want this sort of information
+    static_configs:
+      - targets: 127.0.0.1:9280
+````
 
 ## Exported metrics
 ### NetScaler
